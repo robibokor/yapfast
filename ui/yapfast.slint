@@ -99,9 +99,10 @@ export component YapfastWindow inherits Window {
     in property <bool> own-title-bar;
     in property <bool> window-maximized;
     no-frame: root.own-title-bar;
-    /// How far the title bar moves the window's content down: nothing while
-    /// the desktop draws it, or in full screen.
-    property <length> title-height: root.own-title-bar && !root.full-screen ? 32px : 0px;
+    /// How far the title bar moves the window's content down. This build draws
+    /// no title bar at all (a tiling window manager places the window), so
+    /// nothing; the desktop's bar can still be chosen in Appearance.
+    property <length> title-height: 0px;
     callback move-window();
     callback resize-window(int);
     callback minimize-window();
