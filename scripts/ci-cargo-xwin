@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
-# cargo-xwin 0.20.2 (nixpkgs' version) with one change to the xwin it uses:
-# Microsoft's manifest no longer lists a per-architecture "Desktop Headers"
-# installer for SDK 10.0.26100 (it held next to nothing; x86's carries the
-# headers), and xwin 0.6.7 stopped on its absence. This build skips it.
+# cargo-xwin 0.20.2 (nixpkgs' version) with one change: Microsoft's manifest
+# now names SDK 10.0.26100's installers with forward slashes
+# ("Installers/Windows SDK Desktop Headers x64-x86_en-us.msi"), and the xwin
+# it uses looks for "Installers\", so it finds no headers. This build turns
+# the slashes back before xwin reads the manifest.
 # Installs to $1/bin; put that first on PATH so `cargo xwin` finds it.
 set -euo pipefail
 dest=${1:?usage: scripts/ci-cargo-xwin DEST}
 work=$(mktemp -d)
 curl -sSfL https://static.crates.io/crates/cargo-xwin/cargo-xwin-0.20.2.crate | tar xz -C "$work"
-cd "$work/cargo-xwin-0.20.2"
-cargo fetch --locked
-src=$(ls -d "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*/xwin-0.6.7 | head -1)
-python3 - "$src/src/lib.rs" <<'PY'
+python3 - "$work/cargo-xwin-0.20.2/src/compiler/clang_cl.rs" <<'PY'
 import sys
 p = sys.argv[1]
 s = open(p).read()
-old = '.with_context(|| format!("unable to find {arch} headers for {}", sdk.id))?;'
-new = ';\n            let Some(header_payload) = header_payload else { continue };'
-assert s.count(old) == 1, 'xwin source changed'
+old = '''        let pkg_manifest =
+            xwin::manifest::get_package_manifest(ctx, &manifest, manifest_pb.clone())?;
+'''
+new = '''        let mut pkg_manifest =
+            xwin::manifest::get_package_manifest(ctx, &manifest, manifest_pb.clone())?;
+        for item in pkg_manifest.packages.values_mut() {
+            for payload in &mut item.payloads {
+                payload.file_name = payload.file_name.replace('/', "\\\\");
+            }
+        }
+'''
+assert s.count(old) == 1, 'cargo-xwin source changed'
 open(p, 'w').write(s.replace(old, new))
 PY
-cargo install --locked --offline --path . --root "$dest"
+cargo install --locked --path "$work/cargo-xwin-0.20.2" --root "$dest"
