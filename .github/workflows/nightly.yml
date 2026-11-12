@@ -100,8 +100,52 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  # The installer, compiled on Windows itself, since Wine doesn't run on the
+  # Linux runner. Inno Setup is the version scripts/package-windows.py pins.
+  installer:
+    needs: [version, windows]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+          sparse-checkout: |
+            packaging
+            LICENSE
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: dist
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe" -OutFile is.exe
+          $hash = (Get-FileHash is.exe -Algorithm SHA256).Hash
+          if ($hash -ne "0362A383ED217D4C4239B5933866DD96D3EB2102737DA92F80F6057A4B40DF2F") { throw "Inno Setup checksum mismatch: $hash" }
+          Start-Process .\is.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/CURRENTUSER','/NORESTART','/DIR=C:\InnoSetup','/NOICONS' -Wait
+          if (-not (Test-Path C:\InnoSetup\ISCC.exe)) { throw "Inno Setup didn't install" }
+      - name: Compile the installer
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $zip = Get-ChildItem dist -Filter "Yapfast-*-windows-x64.zip" | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath pkg
+          $src = (Get-ChildItem pkg -Directory | Select-Object -First 1).FullName
+          if (-not (Test-Path "$src\yapfast.exe")) { throw "yapfast.exe not in $src" }
+          New-Item -ItemType Directory out | Out-Null
+          & C:\InnoSetup\ISCC.exe /Q "/DAppVersion=$env:VERSION" "/DVersionNumber=$($env:VERSION.Split('-')[0])" "/DSourceDir=$src" "/DLicenseFile=$PWD\LICENSE" "/O$PWD\out" packaging\windows\yapfast.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: out/*.exe
+          if-no-files-found: error
+          compression-level: 0
+
   release:
-    needs: [version, linux, windows]
+    needs: [version, linux, windows, installer]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -129,6 +173,7 @@ jobs:
           mkdir release
           mv dist/linux/Yapfast-* dist/linux/yapfast-*.pkg.tar.zst release/
           mv dist/windows/Yapfast-*-windows-x64* release/
+          mv dist/installer/Yapfast-*-setup.exe release/
           (cd release && sha256sum Yapfast-* yapfast-*.pkg.tar.zst > SHA256SUMS.txt)
           # The newest nightly, or before the first one the latest release.
           previous=$(gh release list --exclude-drafts --limit 100 --json tagName \
