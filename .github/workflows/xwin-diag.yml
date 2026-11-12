@@ -1,0 +1,16 @@
+name: xwin-diag
+on: workflow_dispatch
+jobs:
+  diag:
+    strategy:
+      fail-fast: false
+      matrix:
+        v: ["0.20.2", "0.21.5", "0.22.0"]
+    runs-on: ubuntu-latest
+    steps:
+      - run: rustup target add x86_64-pc-windows-msvc
+      - run: cargo install --locked cargo-xwin --version ${{ matrix.v }}
+      - run: |
+          cargo xwin env --target x86_64-pc-windows-msvc > env.txt 2>err.txt; echo "exit=$?"; tail -5 err.txt
+          ls ~/.cache/cargo-xwin/xwin/sdk/include 2>&1; ls ~/.cache/cargo-xwin/xwin/sdk/include/um | wc -l
+          ls ~/.cache/cargo-xwin/xwin/sdk/include/um/windows.h ~/.cache/cargo-xwin/xwin/sdk/include/um/minwinbase.h
