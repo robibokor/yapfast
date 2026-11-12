@@ -92,7 +92,10 @@ jobs:
       - run: scripts/set-version "${{ needs.version.outputs.version }}"
       # Wine doesn't start on the runner (kernel32.dll, c0000135), so Inno
       # Setup can't make the installer there.
-      - run: nix develop path:./nix#windows --command scripts/build-windows discord --no-installer
+      # cargo-xwin that reads the SDK manifest's new forward-slash installer
+      # names (scripts/ci-cargo-xwin), ahead of the dev shell's own.
+      - run: scripts/ci-cargo-xwin ~/.local/cargo-xwin-fix
+      - run: nix develop path:./nix#windows --command bash -c 'PATH="$HOME/.local/cargo-xwin-fix/bin:$PATH" exec scripts/build-windows discord --no-installer'
       - uses: actions/upload-artifact@v4
         with:
           name: windows
