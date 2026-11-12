@@ -66,6 +66,11 @@ jobs:
   windows:
     needs: version
     runs-on: ubuntu-latest
+    # cargo-xwin takes the newest SDK in Microsoft's manifest by default, and
+    # fails to find the x86_64 headers of 10.0.26100 in it; 22621 has them.
+    env:
+      XWIN_VERSION: "17"
+      XWIN_SDK_VERSION: "10.0.22621"
     steps:
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
