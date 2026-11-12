@@ -2,19 +2,19 @@ name: xwin-diag
 on: workflow_dispatch
 jobs:
   diag:
-    strategy:
-      fail-fast: false
-      matrix:
-        v: ["0.20.2", "0.22.0"]
-        m: ["17", "18"]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - run: rustup target add x86_64-pc-windows-msvc
-      - run: cargo install --locked cargo-xwin --version ${{ matrix.v }}
-      - env:
-          XWIN_VERSION: ${{ matrix.m }}
-        run: |
+      - run: scripts/ci-cargo-xwin ~/xwfix
+      - run: |
           set +e
+          export PATH=$HOME/xwfix/bin:$PATH
           cargo xwin env --target x86_64-pc-windows-msvc > env.txt 2>err.txt; echo "exit=$?"; tail -15 err.txt
-          ls ~/.cache/cargo-xwin/xwin/sdk/include 2>&1; ls ~/.cache/cargo-xwin/xwin/sdk/include/um | wc -l
-          ls ~/.cache/cargo-xwin/xwin/sdk/include/um/windows.h ~/.cache/cargo-xwin/xwin/sdk/include/um/minwinbase.h
+          ls ~/.cache/cargo-xwin/xwin/sdk/include/um | wc -l
+          ls ~/.cache/cargo-xwin/xwin/sdk/lib/um/x86_64 | wc -l
+          grep -n "FILE_INFO_BY_HANDLE_CLASS" ~/.cache/cargo-xwin/xwin/sdk/include/um/minwinbase.h | head -3
+          eval "$(cat env.txt)"
+          printf '#include <winsock2.h>\n#include <windows.h>\nint main(void){FILE_INFO_BY_HANDLE_CLASS c = FileBasicInfo; return (int)c;}\n' > t.cc
+          ls /usr/bin/clang* | head
+          clang-cl $CXXFLAGS_x86_64_pc_windows_msvc /c t.cc; echo "compile=$?"
